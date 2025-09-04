@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Accounting System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GST Billing</title>
 
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -12,7 +12,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
 
   <!-- jsPDF for PDF Export -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -20,16 +19,28 @@
 
   <style>
     body { font-family: 'Inter', sans-serif; }
+    .sidebar { width: 240px; height: 100vh; position: fixed; top: 0; left: 0; background: #f9fafb; border-right: 1px solid #e5e7eb; }
+    .main-content { margin-left: 240px; padding: 2rem; min-height: 100vh; }
+    .card { border-radius: 12px; border: 1px solid #e5e7eb; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .stats-card { padding: 1.5rem; text-align: center; }
+    .stat-number { font-size: 2rem; font-weight: bold; }
+    .stat-change { font-size: 0.8rem; }
+    .positive { color: #10b981; }
+    .negative { color: #ef4444; }
+    .btn-primary { background: #1e40af; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; }
+    .btn-secondary { background: transparent; color: #6b7280; border: 1px solid #d1d5db; padding: 0.5rem 1rem; border-radius: 6px; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 50; }
+    .modal { background: white; max-width: 600px; width: 90%; padding: 1.5rem; border-radius: 12px; }
     .hidden { display: none !important; }
-    .active-tab { border-bottom: 3px solid #2563eb; color: #1e40af; }
+    .active { background: #f3f4f6; }
   </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
+<body class="bg-gray-50">
 
 <!-- Firebase Config -->
 <script>
   const firebaseConfig = {
-    apiKey: "AIzaSyASGOM7eD3S-vTXpo869ctfbIk2jzqUbXY",
+   apiKey: "AIzaSyASGOM7eD3S-vTXpo869ctfbIk2jzqUbXY",
   authDomain: "pocketretail-742e1.firebaseapp.com",
   projectId: "pocketretail-742e1",
   storageBucket: "pocketretail-742e1.firebasestorage.app",
@@ -38,673 +49,725 @@
   measurementId: "G-4QY5Y5R5KL"
   };
   firebase.initializeApp(firebaseConfig);
-
   const db = firebase.firestore();
   const auth = firebase.auth();
-  const storage = firebase.storage();
 
   let currentUser = null;
   let currentCompany = null;
   let currentFY = null;
+
+  // Initialize
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      currentUser = user;
+      document.getElementById("authScreen").classList.add("hidden");
+      document.getElementById("dashboard").classList.remove("hidden");
+      loadCompanies();
+      loadFYs();
+      loadDashboard();
+    } else {
+      document.getElementById("dashboard").classList.add("hidden");
+      document.getElementById("authScreen").classList.remove("hidden");
+    }
+  });
 </script>
 
+<!-- Auth Screen -->
+<div id="authScreen" class="flex items-center justify-center h-screen bg-gray-100">
+  <div class="text-center p-8 bg-white rounded-lg shadow-lg max-w-sm">
+    <h1 class="text-2xl font-bold mb-4">GST Billing</h1>
+    <p class="text-gray-600 mb-6">Login to manage your businesses</p>
+    <button onclick="signIn()" class="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+      Sign In with Google
+    </button>
+  </div>
+</div>
+
 <!-- Main App -->
-<div id="app" class="min-h-screen flex flex-col">
-
-  <!-- Auth Screen -->
-  <div id="authScreen" class="flex flex-col items-center justify-center p-8 space-y-6">
-    <h1 class="text-3xl font-bold text-blue-700">Accounting Pro</h1>
-    <p class="text-gray-600">Login to manage your businesses</p>
-    <button onclick="signIn()" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Sign In with Google</button>
+<div id="dashboard" class="hidden">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="p-6 border-b">
+      <h1 class="text-xl font-bold text-gray-800">GST Billing</h1>
+    </div>
+    <nav class="mt-4 space-y-2 px-4">
+      <a href="#" onclick="loadPage('dashboard')" class="block px-4 py-3 text-gray-700 hover:bg-gray-100 rounded transition active">Dashboard</a>
+      <a href="#" onclick="loadPage('companies')" class="block px-4 py-3 text-gray-700 hover:bg-gray-100 rounded transition">Companies</a>
+      <a href="#" onclick="loadPage('parties')" class="block px-4 py-3 text-gray-700 hover:bg-gray-100 rounded transition">Parties</a>
+      <a href="#" onclick="loadPage('products')" class="block px-4 py-3 text-gray-700 hover:bg-gray-100 rounded transition">Products</a>
+      <a href="#" onclick="loadPage('invoices')" class="block px-4 py-3 text-gray-700 hover:bg-gray-100 rounded transition">Invoices</a>
+      <a href="#" onclick="loadPage('purchases')" class="block px-4 py-3 text-gray-700 hover:bg-gray-100 rounded transition">Purchases</a>
+      <a href="#" onclick="loadPage('ledger')" class="block px-4 py-3 text-gray-700 hover:bg-gray-100 rounded transition">Ledger</a>
+      <a href="#" onclick="loadPage('gst')" class="block px-4 py-3 text-gray-700 hover:bg-gray-100 rounded transition">GST</a>
+    </nav>
   </div>
 
-  <!-- Dashboard -->
-  <div id="dashboard" class="hidden flex-1 flex flex-col">
+  <!-- Main Content -->
+  <div class="main-content">
+    <div id="page-content"></div>
+  </div>
+</div>
 
-    <!-- Header -->
-    <header class="bg-white shadow-sm border-b px-6 py-4 flex justify-between items-center">
-      <h2 class="text-xl font-semibold text-gray-800" id="companyDisplayName">No Company</h2>
-      <div class="flex items-center space-x-4">
-        <select id="fySelector" class="text-sm border rounded px-2 py-1" onchange="switchFY()">
-          <option value="">Select FY</option>
-        </select>
-        <select id="companySelector" class="text-sm border rounded px-2 py-1" onchange="switchCompany()">
-          <option value="">Switch Company</option>
-        </select>
-        <button onclick="logout()" class="text-sm text-red-600 hover:underline">Logout</button>
-      </div>
-    </header>
-
-    <!-- Tabs -->
-    <div class="bg-white border-b">
-      <div class="flex space-x-8 px-6">
-        <button class="tab-btn active-tab p-4 font-medium" data-tab="dashboardTab">Dashboard</button>
-        <button class="tab-btn p-4 font-medium" data-tab="invoiceTab">Invoices</button>
-        <button class="tab-btn p-4 font-medium" data-tab="purchaseTab">Purchases</button>
-        <button class="tab-btn p-4 font-medium" data-tab="notesTab">Credit/Debit Notes</button>
-        <button class="tab-btn p-4 font-medium" data-tab="ledgerTab">Ledgers</button>
-        <button class="tab-btn p-4 font-medium" data-tab="gstTab">GST Reports</button>
-        <button class="tab-btn p-4 font-medium" data-tab="settingsTab">Settings</button>
-      </div>
-    </div>
-
-    <!-- Tab Content -->
-    <div class="flex-1 p-6 overflow-auto">
-
-      <!-- Dashboard Tab -->
-      <div id="dashboardTab" class="tab-content">
-        <h3 class="text-lg font-semibold mb-4">Welcome, <span id="userGreeting"></span></h3>
-        <p class="text-gray-600">Manage your invoices, ledgers, and GST filings from one place.</p>
-      </div>
-
-      <!-- Invoice Tab -->
-      <div id="invoiceTab" class="tab-content hidden">
-        <div class="mb-6">
-          <button onclick="showModal('invoiceModal')" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">+ New Invoice</button>
+<!-- Modals -->
+<div id="invoiceModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2 class="text-xl font-semibold mb-4">Create Invoice</h2>
+    <form id="invoiceForm">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">From (Your Company)</label>
+          <select id="fromCompany" class="w-full p-2 border rounded">
+            <option value="">Select company</option>
+          </select>
         </div>
-        <table class="min-w-full bg-white border rounded-lg overflow-hidden" id="invoiceTable">
-          <thead class="bg-gray-100">
-            <tr>
-              <th class="py-2 px-4 border-b">No</th>
-              <th class="py-2 px-4 border-b">Date</th>
-              <th class="py-2 px-4 border-b">Party</th>
-              <th class="py-2 px-4 border-b">Amount</th>
-              <th class="py-2 px-4 border-b">Action</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-
-      <!-- Purchase Tab -->
-      <div id="purchaseTab" class="tab-content hidden">
-        <div class="mb-6">
-          <button onclick="showModal('purchaseModal')" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">+ New Purchase Bill</button>
+        <div>
+          <label class="block text-sm font-medium mb-1">To (Customer)</label>
+          <select id="toParty" class="w-full p-2 border rounded">
+            <option value="">Select customer</option>
+          </select>
         </div>
-        <table class="min-w-full bg-white border rounded-lg overflow-hidden" id="purchaseTable">
-          <thead class="bg-gray-100">
-            <tr>
-              <th class="py-2 px-4 border-b">No</th>
-              <th class="py-2 px-4 border-b">Date</th>
-              <th class="py-2 px-4 border-b">Vendor</th>
-              <th class="py-2 px-4 border-b">Amount</th>
-              <th class="py-2 px-4 border-b">Action</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-
-      <!-- Credit/Debit Notes -->
-      <div id="notesTab" class="tab-content hidden">
-        <div class="mb-6">
-          <button onclick="showModal('creditNoteModal')" class="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 mr-2">+ Credit Note</button>
-          <button onclick="showModal('debitNoteModal')" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">+ Debit Note</button>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Date</label>
+            <input type="date" id="invDate" class="w-full p-2 border rounded" required />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Invoice Number</label>
+            <input type="text" id="invNumber" class="w-full p-2 border rounded" placeholder="Auto (INV-0001)" readonly />
+          </div>
         </div>
-        <table class="min-w-full bg-white border rounded-lg overflow-hidden" id="notesTable">
-          <thead class="bg-gray-100">
-            <tr>
-              <th class="py-2 px-4 border-b">Type</th>
-              <th class="py-2 px-4 border-b">Date</th>
-              <th class="py-2 px-4 border-b">Party</th>
-              <th class="py-2 px-4 border-b">Amount</th>
-              <th class="py-2 px-4 border-b">Action</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-
-      <!-- Ledgers -->
-      <div id="ledgerTab" class="tab-content hidden">
-        <h3 class="text-lg font-semibold mb-4">Auto-Generated Ledgers</h3>
-        <ul id="ledgerList" class="space-y-2"></ul>
-      </div>
-
-      <!-- GST Reports -->
-      <div id="gstTab" class="tab-content hidden">
-        <h3 class="text-lg font-semibold mb-4">GST Summary (GSTR-1)</h3>
-        <button onclick="generateGSTReport()" class="px-4 py-2 bg-blue-600 text-white rounded mb-4">Generate Report</button>
-        <div id="gstReportOutput" class="bg-gray-50 p-4 rounded border"></div>
-      </div>
-
-      <!-- Settings -->
-      <div id="settingsTab" class="tab-content hidden">
-        <h3 class="text-lg font-semibold mb-4">Company & Financial Year</h3>
-        <button onclick="showModal('companyModal')" class="mb-4 px-4 py-2 bg-purple-600 text-white rounded">+ Add Company</button>
-        <button onclick="showModal('fyModal')" class="mb-4 px-4 py-2 bg-orange-600 text-white rounded ml-2">+ Add Financial Year</button>
-        <div id="settingsList" class="space-y-4"></div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- Modals -->
-  <!-- Company Modal -->
-  <div id="companyModal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-    <div class="bg-white p-6 rounded-lg w-96">
-      <h3 class="text-lg font-bold mb-4">Add Company</h3>
-      <input id="companyName" placeholder="Company Name" class="w-full p-2 border rounded mb-2"/>
-      <input id="companyGST" placeholder="GSTIN" class="w-full p-2 border rounded mb-2"/>
-      <input id="companyAddress" placeholder="Address" class="w-full p-2 border rounded mb-4"/>
-      <div class="flex justify-end space-x-2">
-        <button onclick="hideModal('companyModal')" class="px-4 py-2 text-gray-600">Cancel</button>
-        <button onclick="saveCompany()" class="px-4 py-2 bg-blue-600 text-white rounded">Save</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- FY Modal -->
-  <div id="fyModal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-    <div class="bg-white p-6 rounded-lg w-96">
-      <h3 class="text-lg font-bold mb-4">Add Financial Year</h3>
-      <input id="fyName" placeholder="FY Name (e.g. 2024-25)" class="w-full p-2 border rounded mb-4"/>
-      <div class="flex justify-end space-x-2">
-        <button onclick="hideModal('fyModal')" class="px-4 py-2 text-gray-600">Cancel</button>
-        <button onclick="saveFY()" class="px-4 py-2 bg-blue-600 text-white rounded">Save</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Invoice Modal -->
-  <div id="invoiceModal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-    <div class="bg-white p-6 rounded-lg w-2/3 max-h-96 overflow-y-auto">
-      <h3 class="text-lg font-bold mb-4">Create Invoice</h3>
-      <input id="invParty" placeholder="Party Name" class="w-full p-2 border rounded mb-2"/>
-      <input id="invGSTIN" placeholder="Party GSTIN" class="w-full p-2 border rounded mb-2"/>
-      <input id="invDate" type="date" class="w-full p-2 border rounded mb-2"/>
-      <div id="invItems">
-        <div class="item-row flex gap-2 mb-2">
-          <input placeholder="Item" class="p-2 border rounded flex-1"/>
-          <input placeholder="Qty" type="number" class="p-2 border rounded w-20"/>
-          <input placeholder="Rate" type="number" class="p-2 border rounded w-24"/>
-          <input placeholder="GST%" type="number" class="p-2 border rounded w-20"/>
-          <button onclick="removeItem(this)" class="text-red-500">✕</button>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">GST Type</label>
+            <select id="gstType" class="w-full p-2 border rounded">
+              <option value="sgst-cgst">SGST + CGST (Intra-state)</option>
+              <option value="igst">IGST (Inter-state)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">GST % on Bill</label>
+            <input type="number" id="gstPercent" class="w-full p-2 border rounded" value="18" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Items</label>
+          <div id="itemsContainer">
+            <div class="item-row flex gap-2 mb-2">
+              <select class="p-2 border rounded w-1/3" onchange="updateItemTotal(this)">
+                <option value="">Select product</option>
+              </select>
+              <input type="number" class="p-2 border rounded w-1/4" value="1" onchange="updateItemTotal(this)" />
+              <input type="number" class="p-2 border rounded w-1/4" value="0" onchange="updateItemTotal(this)" />
+              <span class="p-2 text-right w-1/4 font-medium">₹0.00</span>
+              <button type="button" class="text-red-500">✕</button>
+            </div>
+          </div>
+          <button type="button" onclick="addItemRow()" class="text-sm text-blue-600 mt-2">+ Add Item</button>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium">Subtotal</label>
+            <div id="subtotal" class="text-lg font-semibold">₹0.00</div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">GST</label>
+            <div id="gstAmount" class="text-lg font-semibold">₹0.00</div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Total</label>
+            <div id="total" class="text-lg font-semibold">₹0.00</div>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Notes</label>
+          <textarea id="notes" class="w-full p-2 border rounded"></textarea>
+        </div>
+        <div class="flex justify-end space-x-2">
+          <button type="button" onclick="hideModal('invoiceModal')" class="px-4 py-2 border rounded">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded">Create Invoice</button>
         </div>
       </div>
-      <button onclick="addItemRow()" class="text-sm text-blue-600 mb-4">+ Add Item</button>
-      <div class="flex justify-end">
-        <button onclick="hideModal('invoiceModal')" class="px-4 py-2 text-gray-600 mr-2">Cancel</button>
-        <button onclick="saveInvoice()" class="px-4 py-2 bg-green-600 text-white rounded">Save Invoice</button>
-      </div>
-    </div>
+    </form>
   </div>
+</div>
 
-  <!-- Purchase Modal -->
-  <div id="purchaseModal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-    <div class="bg-white p-6 rounded-lg w-2/3 max-h-96 overflow-y-auto">
-      <h3 class="text-lg font-bold mb-4">Create Purchase Bill</h3>
-      <input id="purVendor" placeholder="Vendor Name" class="w-full p-2 border rounded mb-2"/>
-      <input id="purGSTIN" placeholder="Vendor GSTIN" class="w-full p-2 border rounded mb-2"/>
-      <input id="purDate" type="date" class="w-full p-2 border rounded mb-2"/>
-      <div id="purItems">
-        <div class="item-row flex gap-2 mb-2">
-          <input placeholder="Item" class="p-2 border rounded flex-1"/>
-          <input placeholder="Qty" type="number" class="p-2 border rounded w-20"/>
-          <input placeholder="Rate" type="number" class="p-2 border rounded w-24"/>
-          <input placeholder="GST%" type="number" class="p-2 border rounded w-20"/>
-          <button onclick="removeItem(this)" class="text-red-500">✕</button>
+<div id="paymentModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2 class="text-xl font-semibold mb-4">Add Payment</h2>
+    <form id="paymentForm">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Amount</label>
+          <input type="number" id="paymentAmount" class="w-full p-2 border rounded" required />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Date</label>
+          <input type="date" id="paymentDate" class="w-full p-2 border rounded" required />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Method</label>
+          <select id="paymentMethod" class="w-full p-2 border rounded">
+            <option value="cash">Cash</option>
+            <option value="upi">UPI</option>
+            <option value="cheque">Cheque</option>
+            <option value="bank">Bank Transfer</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Reference / Txn / Cheque No.</label>
+          <input type="text" id="reference" class="w-full p-2 border rounded" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Notes</label>
+          <textarea id="paymentNotes" class="w-full p-2 border rounded"></textarea>
+        </div>
+        <div class="flex justify-end space-x-2">
+          <button type="button" onclick="hideModal('paymentModal')" class="px-4 py-2 border rounded">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded">Save Payment</button>
         </div>
       </div>
-      <button onclick="addPurItemRow()" class="text-sm text-blue-600 mb-4">+ Add Item</button>
-      <div class="flex justify-end">
-        <button onclick="hideModal('purchaseModal')" class="px-4 py-2 text-gray-600 mr-2">Cancel</button>
-        <button onclick="savePurchase()" class="px-4 py-2 bg-indigo-600 text-white rounded">Save Bill</button>
-      </div>
-    </div>
+    </form>
   </div>
-
-  <!-- Credit/Debit Note Modal -->
-  <div id="creditNoteModal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-    <div class="bg-white p-6 rounded-lg w-96">
-      <h3 class="text-lg font-bold mb-4">Credit Note</h3>
-      <input id="cnParty" placeholder="Customer" class="w-full p-2 border rounded mb-2"/>
-      <input id="cnDate" type="date" class="w-full p-2 border rounded mb-2"/>
-      <textarea id="cnReason" placeholder="Reason" class="w-full p-2 border rounded mb-4 h-20"></textarea>
-      <input id="cnAmount" type="number" placeholder="Amount" class="w-full p-2 border rounded mb-4"/>
-      <div class="flex justify-end">
-        <button onclick="hideModal('creditNoteModal')" class="px-4 py-2 text-gray-600 mr-2">Cancel</button>
-        <button onclick="saveNote('credit')" class="px-4 py-2 bg-yellow-600 text-white rounded">Save</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="debitNoteModal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-    <div class="bg-white p-6 rounded-lg w-96">
-      <h3 class="text-lg font-bold mb-4">Debit Note</h3>
-      <input id="dnVendor" placeholder="Vendor" class="w-full p-2 border rounded mb-2"/>
-      <input id="dnDate" type="date" class="w-full p-2 border rounded mb-2"/>
-      <textarea id="dnReason" placeholder="Reason" class="w-full p-2 border rounded mb-4 h-20"></textarea>
-      <input id="dnAmount" type="number" placeholder="Amount" class="w-full p-2 border rounded mb-4"/>
-      <div class="flex justify-end">
-        <button onclick="hideModal('debitNoteModal')" class="px-4 py-2 text-gray-600 mr-2">Cancel</button>
-        <button onclick="saveNote('debit')" class="px-4 py-2 bg-red-600 text-white rounded">Save</button>
-      </div>
-    </div>
-  </div>
-
 </div>
 
 <script>
-  // Auth
+  // Firebase Auth
   function signIn() {
     const provider = new firebase.auth.GoogleAuthProvider();
     auth.signInWithPopup(provider)
-      .then(cred => {
-        currentUser = cred.user;
-        document.getElementById("authScreen").classList.add("hidden");
-        document.getElementById("dashboard").classList.remove("hidden");
-        document.getElementById("userGreeting").innerText = currentUser.displayName || currentUser.email;
-        loadCompanies();
-        loadFYs();
+      .then(() => {
+        alert("Signed in successfully!");
       })
       .catch(err => alert(err.message));
   }
 
   function logout() {
     auth.signOut().then(() => {
-      location.reload();
+      window.location.reload();
     });
   }
 
-  // Tab Switching
-  document.querySelectorAll(".tab-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".tab-content").forEach(t => t.classList.add("hidden"));
-      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active-tab"));
-      btn.classList.add("active-tab");
-      const tab = btn.getAttribute("data-tab");
-      document.getElementById(tab).classList.remove("hidden");
-    });
-  });
+  // Page Navigation
+  function loadPage(page) {
+    const content = document.getElementById("page-content");
+    content.innerHTML = `<div class="animate-pulse">Loading ${page}...</div>`;
+    
+    switch(page) {
+      case 'dashboard': loadDashboard(); break;
+      case 'companies': loadCompanies(); break;
+      case 'parties': loadParties(); break;
+      case 'products': loadProducts(); break;
+      case 'invoices': loadInvoices(); break;
+      case 'purchases': loadPurchases(); break;
+      case 'ledger': loadLedger(); break;
+      case 'gst': loadGST(); break;
+    }
+  }
 
-  // Modal
-  function showModal(id) { document.getElementById(id).classList.remove("hidden"); }
-  function hideModal(id) { document.getElementById(id).classList.add("hidden"); }
+  // Load Dashboard
+  async function loadDashboard() {
+    const snapshot = await db.collection("companies").where("userId", "==", currentUser.uid).get();
+    const totalCompanies = snapshot.size;
+
+    const invSnapshot = await db.collection("invoices").where("userId", "==", currentUser.uid).get();
+    const invoiceCount = invSnapshot.size;
+
+    const purchaseSnapshot = await db.collection("purchases").where("userId", "==", currentUser.uid).get();
+    const purchaseCount = purchaseSnapshot.size;
+
+    const revenue = await db.collection("invoices")
+      .where("userId", "==", currentUser.uid)
+      .get()
+      .then(snap => snap.docs.reduce((sum, doc) => sum + doc.data().total, 0));
+
+    const content = document.getElementById("page-content");
+    content.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="card stats-card">
+          <h3 class="text-sm font-medium text-gray-500">Total Companies</h3>
+          <div class="stat-number">${totalCompanies}</div>
+          <div class="stat-change positive">+2 this month</div>
+        </div>
+        <div class="card stats-card">
+          <h3 class="text-sm font-medium text-gray-500">Invoice Bills</h3>
+          <div class="stat-number">${invoiceCount}</div>
+          <div class="stat-change positive">+12% from last month</div>
+        </div>
+        <div class="card stats-card">
+          <h3 class="text-sm font-medium text-gray-500">Purchase Bills</h3>
+          <div class="stat-number">${purchaseCount}</div>
+          <div class="stat-change negative">-3% from last month</div>
+        </div>
+        <div class="card stats-card">
+          <h3 class="text-sm font-medium text-gray-500">Total Revenue</h3>
+          <div class="stat-number">₹${revenue.toFixed(2)}</div>
+          <div class="stat-change positive">+18% from last month</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card">
+          <h2 class="text-lg font-semibold mb-4">Recent Invoices</h2>
+          <p class="text-sm text-gray-500 mb-4">Latest invoice bills generated</p>
+          <div class="border-t pt-4">
+            <div class="flex justify-between items-center py-3 px-4 border-b">
+              <div>
+                <div class="font-medium">INV-0001</div>
+                <div class="text-sm text-gray-500">Beta Retail</div>
+              </div>
+              <div class="text-right">
+                <div class="font-semibold">₹3,540</div>
+                <div class="text-xs text-yellow-600">Pending</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="text-lg font-semibold mb-4">Quick Actions</h2>
+          <p class="text-sm text-gray-500 mb-4">Common tasks and operations</p>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between p-3 border rounded">
+              <div class="flex items-center space-x-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v1H6V10zm8 4a2 2 0 012-2h2a2 2 0 012 2v1H12v-1z"/>
+                </svg>
+                <div>
+                  <div class="font-medium">Create Invoice</div>
+                  <div class="text-sm text-gray-500">Generate a new invoice bill</div>
+                </div>
+              </div>
+              <button onclick="showModal('invoiceModal')" class="text-sm text-blue-600">Open</button>
+            </div>
+            <div class="flex items-center justify-between p-3 border rounded">
+              <div class="flex items-center space-x-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v1H6V10zm8 4a2 2 0 012-2h2a2 2 0 012 2v1H12v-1z"/>
+                </svg>
+                <div>
+                  <div class="font-medium">Add Company</div>
+                  <div class="text-sm text-gray-500">Register a new company</div>
+                </div>
+              </div>
+              <button onclick="showModal('companyModal')" class="text-sm text-blue-600">Open</button>
+            </div>
+            <div class="flex items-center justify-between p-3 border rounded">
+              <div class="flex items-center space-x-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v1H6V10zm8 4a2 2 0 012-2h2a2 2 0 012 2v1H12v-1z"/>
+                </svg>
+                <div>
+                  <div class="font-medium">Add Product</div>
+                  <div class="text-sm text-gray-500">Add a new product or service</div>
+                </div>
+              </div>
+              <button onclick="showModal('productModal')" class="text-sm text-blue-600">Open</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Show/Hide Modal
+  function showModal(id) {
+    document.getElementById(id).classList.remove("hidden");
+  }
+  function hideModal(id) {
+    document.getElementById(id).classList.add("hidden");
+  }
 
   // Add Item Row
   function addItemRow() {
-    const container = document.getElementById("invItems");
+    const container = document.getElementById("itemsContainer");
     const row = document.createElement("div");
     row.className = "item-row flex gap-2 mb-2";
     row.innerHTML = `
-      <input placeholder="Item" class="p-2 border rounded flex-1"/>
-      <input placeholder="Qty" type="number" class="p-2 border rounded w-20"/>
-      <input placeholder="Rate" type="number" class="p-2 border rounded w-24"/>
-      <input placeholder="GST%" type="number" class="p-2 border rounded w-20"/>
-      <button type="button" onclick="removeItem(this)" class="text-red-500">✕</button>
-    `;
-    container.appendChild(row);
-  }
-
-  function addPurItemRow() {
-    const container = document.getElementById("purItems");
-    const row = document.createElement("div");
-    row.className = "item-row flex gap-2 mb-2";
-    row.innerHTML = `
-      <input placeholder="Item" class="p-2 border rounded flex-1"/>
-      <input placeholder="Qty" type="number" class="p-2 border rounded w-20"/>
-      <input placeholder="Rate" type="number" class="p-2 border rounded w-24"/>
-      <input placeholder="GST%" type="number" class="p-2 border rounded w-20"/>
-      <button type="button" onclick="removeItem(this)" class="text-red-500">✕</button>
+      <select class="p-2 border rounded w-1/3" onchange="updateItemTotal(this)">
+        <option value="">Select product</option>
+      </select>
+      <input type="number" class="p-2 border rounded w-1/4" value="1" onchange="updateItemTotal(this)" />
+      <input type="number" class="p-2 border rounded w-1/4" value="0" onchange="updateItemTotal(this)" />
+      <span class="p-2 text-right w-1/4 font-medium">₹0.00</span>
+      <button type="button" class="text-red-500">✕</button>
     `;
     container.appendChild(row);
   }
 
   function removeItem(button) {
     button.parentElement.remove();
+    updateTotals();
   }
 
-  // Companies
-  async function saveCompany() {
-    const name = document.getElementById("companyName").value;
-    const gstin = document.getElementById("companyGST").value;
-    const address = document.getElementById("companyAddress").value;
+  function updateItemTotal(select) {
+    const row = select.closest(".item-row");
+    const qty = parseFloat(row.querySelector("input:nth-child(2)").value) || 0;
+    const rate = parseFloat(row.querySelector("input:nth-child(3)").value) || 0;
+    const amount = qty * rate;
+    row.querySelector("span").textContent = `₹${amount.toFixed(2)}`;
+    updateTotals();
+  }
 
-    if (!name || !gstin) return alert("Name and GSTIN required");
-
-    await db.collection("companies").add({
-      name, gstin, address, userId: currentUser.uid, createdAt: new Date()
+  function updateTotals() {
+    const items = document.querySelectorAll(".item-row");
+    let subtotal = 0;
+    items.forEach(item => {
+      const amount = parseFloat(item.querySelector("span").textContent.replace(/[^0-9.]/g, '')) || 0;
+      subtotal += amount;
     });
 
-    document.getElementById("companyName").value = "";
-    document.getElementById("companyGST").value = "";
-    document.getElementById("companyAddress").value = "";
-    hideModal("companyModal");
-    loadCompanies();
+    const gstPercent = parseFloat(document.getElementById("gstPercent").value) || 0;
+    const gstAmount = subtotal * (gstPercent / 100);
+    const total = subtotal + gstAmount;
+
+    document.getElementById("subtotal").textContent = `₹${subtotal.toFixed(2)}`;
+    document.getElementById("gstAmount").textContent = `₹${gstAmount.toFixed(2)}`;
+    document.getElementById("total").textContent = `₹${total.toFixed(2)}`;
   }
 
-  async function loadCompanies() {
-    const snapshot = await db.collection("companies")
-      .where("userId", "==", currentUser.uid).get();
-    const selector = document.getElementById("companySelector");
-    selector.innerHTML = "<option value=''>Switch Company</option>";
-    snapshot.forEach(doc => {
-      const opt = document.createElement("option");
-      opt.value = doc.id;
-      opt.textContent = doc.data().name;
-      selector.appendChild(opt);
-    });
-  }
+  // Save Invoice
+  document.getElementById("invoiceForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData.entries());
 
-  async function switchCompany() {
-    const cid = document.getElementById("companySelector").value;
-    if (!cid) return;
-    currentCompany = (await db.collection("companies").doc(cid).get()).data();
-    currentCompany.id = cid;
-    document.getElementById("companyDisplayName").textContent = currentCompany.name;
-    loadInvoices();
-    loadPurchases();
-    loadNotes();
-    generateLedgers();
-  }
-
-  // Financial Year
-  async function saveFY() {
-    const name = document.getElementById("fyName").value;
-    if (!name) return alert("FY name required");
-    await db.collection("fyears").add({
-      name, companyId: currentCompany.id, userId: currentUser.uid, createdAt: new Date()
-    });
-    document.getElementById("fyName").value = "";
-    hideModal("fyModal");
-    loadFYs();
-  }
-
-  async function loadFYs() {
-    if (!currentCompany) return;
-    const snapshot = await db.collection("fyears")
-      .where("companyId", "==", currentCompany.id).get();
-    const selector = document.getElementById("fySelector");
-    selector.innerHTML = "<option value=''>Select FY</option>";
-    snapshot.forEach(doc => {
-      const opt = document.createElement("option");
-      opt.value = doc.id;
-      opt.textContent = doc.data().name;
-      selector.appendChild(opt);
-    });
-  }
-
-  async function switchFY() {
-    const fid = document.getElementById("fySelector").value;
-    if (!fid) return;
-    currentFY = fid;
-    loadInvoices();
-    loadPurchases();
-    loadNotes();
-  }
-
-  // Invoices
-  async function saveInvoice() {
-    const party = document.getElementById("invParty").value;
-    const gstin = document.getElementById("invGSTIN").value;
-    const date = document.getElementById("invDate").value;
-    const items = [];
-    let total = 0;
-
-    document.querySelectorAll("#invItems .item-row").forEach(row => {
-      const inputs = row.querySelectorAll("input");
-      const item = {
-        name: inputs[0].value,
-        qty: parseFloat(inputs[1].value) || 0,
-        rate: parseFloat(inputs[2].value) || 0,
-        gst: parseFloat(inputs[3].value) || 0
-      };
-      item.amount = item.qty * item.rate;
-      const gstAmount = item.amount * (item.gst / 100);
-      item.total = item.amount + gstAmount;
-      total += item.total;
-      items.push(item);
-    });
-
+    // Save to Firestore
     await db.collection("invoices").add({
-      party, gstin, date, items, total, companyId: currentCompany.id, fyId: currentFY,
-      userId: currentUser.uid, type: "invoice", createdAt: new Date()
+      ...data,
+      userId: currentUser.uid,
+      createdAt: new Date(),
+      status: "pending"
     });
 
     hideModal("invoiceModal");
-    clearForm("invItems");
+    alert("Invoice created!");
     loadInvoices();
-    generateLedgers();
-  }
+  });
 
-  function clearForm(id) {
-    const container = document.getElementById(id);
-    container.innerHTML = `<div class="item-row flex gap-2 mb-2">
-      <input placeholder="Item" class="p-2 border rounded flex-1"/>
-      <input placeholder="Qty" type="number" class="p-2 border rounded w-20"/>
-      <input placeholder="Rate" type="number" class="p-2 border rounded w-24"/>
-      <input placeholder="GST%" type="number" class="p-2 border rounded w-20"/>
-      <button onclick="removeItem(this)" class="text-red-500">✕</button>
-    </div>`;
-  }
-
+  // Load Invoices
   async function loadInvoices() {
-    if (!currentCompany || !currentFY) return;
-    const snapshot = await db.collection("invoices")
-      .where("companyId", "==", currentCompany.id)
-      .where("fyId", "==", currentFY).get();
-    const tbody = document.querySelector("#invoiceTable tbody");
-    tbody.innerHTML = "";
-    snapshot.forEach((doc, i) => {
-      const d = doc.data();
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td class="py-2 px-4 border-b">${i+1}</td>
-        <td class="py-2 px-4 border-b">${d.date}</td>
-        <td class="py-2 px-4 border-b">${d.party}</td>
-        <td class="py-2 px-4 border-b">₹${d.total.toFixed(2)}</td>
-        <td class="py-2 px-4 border-b">
-          <button onclick="downloadInvoice('${doc.id}')" class="text-blue-600 text-sm">PDF</button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  // Purchases
-  async function savePurchase() {
-    const vendor = document.getElementById("purVendor").value;
-    const gstin = document.getElementById("purGSTIN").value;
-    const date = document.getElementById("purDate").value;
-    const items = [];
-    let total = 0;
-
-    document.querySelectorAll("#purItems .item-row").forEach(row => {
-      const inputs = row.querySelectorAll("input");
-      const item = {
-        name: inputs[0].value,
-        qty: parseFloat(inputs[1].value) || 0,
-        rate: parseFloat(inputs[2].value) || 0,
-        gst: parseFloat(inputs[3].value) || 0
-      };
-      item.amount = item.qty * item.rate;
-      const gstAmount = item.amount * (item.gst / 100);
-      item.total = item.amount + gstAmount;
-      total += item.total;
-      items.push(item);
-    });
-
-    await db.collection("purchases").add({
-      vendor, gstin, date, items, total, companyId: currentCompany.id, fyId: currentFY,
-      userId: currentUser.uid, type: "purchase", createdAt: new Date()
-    });
-
-    hideModal("purchaseModal");
-    clearForm("purItems");
-    loadPurchases();
-    generateLedgers();
-  }
-
-  async function loadPurchases() {
-    if (!currentCompany || !currentFY) return;
-    const snapshot = await db.collection("purchases")
-      .where("companyId", "==", currentCompany.id)
-      .where("fyId", "==", currentFY).get();
-    const tbody = document.querySelector("#purchaseTable tbody");
-    tbody.innerHTML = "";
-    snapshot.forEach((doc, i) => {
-      const d = doc.data();
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td class="py-2 px-4 border-b">${i+1}</td>
-        <td class="py-2 px-4 border-b">${d.date}</td>
-        <td class="py-2 px-4 border-b">${d.vendor}</td>
-        <td class="py-2 px-4 border-b">₹${d.total.toFixed(2)}</td>
-        <td class="py-2 px-4 border-b">
-          <button onclick="downloadPurchase('${doc.id}')" class="text-blue-600 text-sm">PDF</button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  // Credit/Debit Notes
-  async function saveNote(type) {
-    const data = type === 'credit' ? {
-      party: document.getElementById("cnParty").value,
-      date: document.getElementById("cnDate").value,
-      reason: document.getElementById("cnReason").value,
-      amount: parseFloat(document.getElementById("cnAmount").value) || 0
-    } : {
-      vendor: document.getElementById("dnVendor").value,
-      date: document.getElementById("dnDate").value,
-      reason: document.getElementById("dnReason").value,
-      amount: parseFloat(document.getElementById("dnAmount").value) || 0
-    };
-
-    await db.collection("notes").add({
-      ...data, type, companyId: currentCompany.id, fyId: currentFY,
-      userId: currentUser.uid, createdAt: new Date()
-    });
-
-    hideModal(type === 'credit' ? 'creditNoteModal' : 'debitNoteModal');
-    loadNotes();
-    generateLedgers();
-  }
-
-  async function loadNotes() {
-    if (!currentCompany || !currentFY) return;
-    const snapshot = await db.collection("notes")
-      .where("companyId", "==", currentCompany.id)
-      .where("fyId", "==", currentFY).get();
-    const tbody = document.querySelector("#notesTable tbody");
-    tbody.innerHTML = "";
-    snapshot.forEach(doc => {
-      const d = doc.data();
-      const tr = document.createElement("tr");
-      const party = d.type === 'credit' ? d.party : d.vendor;
-      tr.innerHTML = `
-        <td class="py-2 px-4 border-b">${d.type === 'credit' ? 'Credit' : 'Debit'}</td>
-        <td class="py-2 px-4 border-b">${d.date}</td>
-        <td class="py-2 px-4 border-b">${party}</td>
-        <td class="py-2 px-4 border-b">₹${d.amount.toFixed(2)}</td>
-        <td class="py-2 px-4 border-b">
-          <button class="text-blue-600 text-sm">PDF</button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  // Ledgers
-  function generateLedgers() {
-    const ledgers = {};
-    // Simplified: collect from invoices, purchases, notes
-    // In real app, sync from Firestore
-    ledgers["Sales"] = { type: "Income", balance: 0 };
-    ledgers["Purchases"] = { type: "Expense", balance: 0 };
-    ledgers["GST Payable"] = { type: "Liability", balance: 0 };
-    ledgers["GST Input"] = { type: "Asset", balance: 0 };
-
-    // This is a demo. In practice, calculate from actual data.
-    document.getElementById("ledgerList").innerHTML = Object.entries(ledgers)
-      .map(([name, acc]) => `<li class="p-3 border rounded"><strong>${name}</strong>: ${acc.type} - ₹${acc.balance}</li>`)
-      .join("");
-  }
-
-  // GST Report
-  async function generateGSTReport() {
-    const snapshot = await db.collection("invoices")
-      .where("companyId", "==", currentCompany.id)
-      .where("fyId", "==", currentFY).get();
-
-    let taxable = 0, igst = 0, cgst = 0, sgst = 0;
-
-    snapshot.forEach(doc => {
-      const d = doc.data();
-      d.items.forEach(item => {
-        taxable += item.amount;
-        if (item.gst > 0) {
-          const gst = item.amount * (item.gst / 100);
-          if (currentCompany.gstin.slice(0,2) !== d.gstin.slice(0,2)) {
-            igst += gst; // Inter-state
-          } else {
-            cgst += gst / 2;
-            sgst += gst / 2;
-          }
-        }
-      });
-    });
-
-    const output = document.getElementById("gstReportOutput");
-    output.innerHTML = `
-      <h4 class="font-semibold">GSTR-1 Summary</h4>
-      <p><strong>Taxable Value:</strong> ₹${taxable.toFixed(2)}</p>
-      <p><strong>IGST:</strong> ₹${igst.toFixed(2)}</p>
-      <p><strong>CGST:</strong> ₹${cgst.toFixed(2)}</p>
-      <p><strong>SGST:</strong> ₹${sgst.toFixed(2)}</p>
-      <button onclick="exportGSTReport()" class="mt-2 px-3 py-1 bg-green-600 text-white text-sm rounded">Export PDF</button>
+    const snapshot = await db.collection("invoices").where("userId", "==", currentUser.uid).get();
+    const content = document.getElementById("page-content");
+    content.innerHTML = `
+      <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Invoice Bills</h1>
+        <button onclick="showModal('invoiceModal')" class="px-4 py-2 bg-blue-600 text-white rounded">+ Create Invoice</button>
+      </div>
+      <div class="card">
+        <h2 class="text-lg font-semibold mb-4">Invoice Bills</h2>
+        <p class="text-sm text-gray-500 mb-4">All generated invoice bills with payment status</p>
+        <table class="min-w-full">
+          <thead>
+            <tr class="border-b">
+              <th class="py-3 px-4 text-left">Invoice #</th>
+              <th class="py-3 px-4 text-left">Company</th>
+              <th class="py-3 px-4 text-left">Date</th>
+              <th class="py-3 px-4 text-left">Due Date</th>
+              <th class="py-3 px-4 text-right">Amount</th>
+              <th class="py-3 px-4 text-right">GST</th>
+              <th class="py-3 px-4 text-right">Total</th>
+              <th class="py-3 px-4 text-left">Status</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${snapshot.docs.map(doc => {
+              const d = doc.data();
+              return `
+                <tr class="border-b">
+                  <td class="py-3 px-4">${d.invoiceNumber || 'INV-' + doc.id.slice(-4)}</td>
+                  <td class="py-3 px-4">${d.companyName || 'Acme Traders'}</td>
+                  <td class="py-3 px-4">${d.date}</td>
+                  <td class="py-3 px-4">${d.dueDate}</td>
+                  <td class="py-3 px-4 text-right">₹${d.amount}</td>
+                  <td class="py-3 px-4 text-right">₹${d.gst}</td>
+                  <td class="py-3 px-4 text-right">₹${d.total}</td>
+                  <td class="py-3 px-4">
+                    <span class="px-2 py-1 text-xs rounded ${d.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">
+                      ${d.status}
+                    </span>
+                  </td>
+                  <td class="py-3 px-4 text-right">
+                    <button onclick="viewInvoice('${doc.id}')" class="text-gray-600 mr-2">👁️</button>
+                    <button onclick="downloadInvoice('${doc.id}')" class="text-gray-600 mr-2">📥</button>
+                    <button onclick="addPayment('${doc.id}')" class="text-gray-600 mr-2">➕</button>
+                    <button onclick="markPaid('${doc.id}')" class="px-3 py-1 bg-black text-white text-xs rounded">Mark Paid</button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
     `;
   }
 
-  function exportGSTReport() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    doc.text("GSTR-1 Report", 10, 10);
-    doc.autoTable({ html: '#gstReportOutput' });
-    doc.save("gstr1.pdf");
+  // Add Payment
+  async function addPayment(invoiceId) {
+    showModal("paymentModal");
+    document.getElementById("paymentForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const data = Object.fromEntries(formData.entries());
+      await db.collection("payments").add({
+        ...data,
+        invoiceId,
+        userId: currentUser.uid,
+        createdAt: new Date()
+      });
+      hideModal("paymentModal");
+      alert("Payment added!");
+      loadInvoices();
+    };
   }
 
-  // PDF Download (simplified)
-  async function downloadInvoice(id) {
+  // Mark as Paid
+  async function markPaid(invoiceId) {
+    await db.collection("invoices").doc(invoiceId).update({ status: "paid" });
+    loadInvoices();
+  }
+
+  // Download Invoice
+  async function downloadInvoice(invoiceId) {
+    const doc = await db.collection("invoices").doc(invoiceId).get();
+    const data = doc.data();
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const inv = (await db.collection("invoices").doc(id).get()).data();
-    doc.text(`Invoice - ${inv.party}`, 10, 10);
-    doc.text(`Date: ${inv.date}`, 10, 20);
-    doc.autoTable({
-      head: [['Item', 'Qty', 'Rate', 'Amount', 'GST%', 'Total']],
-      body: inv.items.map(i => [i.name, i.qty, i.rate, i.amount.toFixed(2), i.gst + '%', i.total.toFixed(2)])
+    const docx = new jsPDF();
+    docx.text("INVOICE", 10, 10);
+    docx.text(`Invoice #: ${data.invoiceNumber}`, 10, 20);
+    docx.autoTable({
+      head: [['Item', 'Qty', 'Rate', 'Amount']],
+      body: data.items.map(i => [i.name, i.qty, i.rate, i.amount])
     });
-    doc.text(`Total: ₹${inv.total.toFixed(2)}`, 10, doc.lastAutoTable.finalY + 10);
-    doc.save(`INV-${id}.pdf`);
+    docx.save(`INV-${data.invoiceNumber}.pdf`);
   }
 
-  async function downloadPurchase(id) {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const pur = (await db.collection("purchases").doc(id).get()).data();
-    doc.text(`Purchase Bill - ${pur.vendor}`, 10, 10);
-    doc.text(`Date: ${pur.date}`, 10, 20);
-    doc.autoTable({
-      head: [['Item', 'Qty', 'Rate', 'Amount', 'GST%', 'Total']],
-      body: pur.items.map(i => [i.name, i.qty, i.rate, i.amount.toFixed(2), i.gst + '%', i.total.toFixed(2)])
-    });
-    doc.text(`Total: ₹${pur.total.toFixed(2)}`, 10, doc.lastAutoTable.finalY + 10);
-    doc.save(`PUR-${id}.pdf`);
+  // View Invoice
+  function viewInvoice(id) {
+    alert("Viewing invoice " + id);
   }
 
-  // Initial Load
-  auth.onAuthStateChanged(user => {
-    if (user) {
-      currentUser = user;
-      document.getElementById("authScreen").classList.add("hidden");
-      document.getElementById("dashboard").classList.remove("hidden");
-      document.getElementById("userGreeting").innerText = user.displayName || user.email;
-      loadCompanies();
+  // Load Products
+  async function loadProducts() {
+    const snapshot = await db.collection("products").where("userId", "==", currentUser.uid).get();
+    const content = document.getElementById("page-content");
+    content.innerHTML = `
+      <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Products</h1>
+        <button onclick="showModal('productModal')" class="px-4 py-2 bg-blue-600 text-white rounded">+ Add Product</button>
+      </div>
+      <div class="card">
+        <table class="min-w-full">
+          <thead>
+            <tr class="border-b">
+              <th class="py-3 px-4 text-left">Name</th>
+              <th class="py-3 px-4 text-left">HSN</th>
+              <th class="py-3 px-4 text-left">Rate</th>
+              <th class="py-3 px-4 text-left">GST%</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${snapshot.docs.map(doc => `
+              <tr class="border-b">
+                <td class="py-3 px-4">${doc.data().name}</td>
+                <td class="py-3 px-4">${doc.data().hsn}</td>
+                <td class="py-3 px-4">${doc.data().rate}</td>
+                <td class="py-3 px-4">${doc.data().gst}%</td>
+                <td class="py-3 px-4 text-right">
+                  <button class="text-red-500">Delete</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // Load Parties
+  async function loadParties() {
+    const snapshot = await db.collection("parties").where("userId", "==", currentUser.uid).get();
+    const content = document.getElementById("page-content");
+    content.innerHTML = `
+      <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Parties</h1>
+        <button onclick="showModal('partyModal')" class="px-4 py-2 bg-blue-600 text-white rounded">+ Add Party</button>
+      </div>
+      <div class="card">
+        <table class="min-w-full">
+          <thead>
+            <tr class="border-b">
+              <th class="py-3 px-4 text-left">Name</th>
+              <th class="py-3 px-4 text-left">GSTIN</th>
+              <th class="py-3 px-4 text-left">Type</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${snapshot.docs.map(doc => `
+              <tr class="border-b">
+                <td class="py-3 px-4">${doc.data().name}</td>
+                <td class="py-3 px-4">${doc.data().gstin}</td>
+                <td class="py-3 px-4">${doc.data().type}</td>
+                <td class="py-3 px-4 text-right">
+                  <button class="text-red-500">Delete</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // Load Companies
+  async function loadCompanies() {
+    const snapshot = await db.collection("companies").where("userId", "==", currentUser.uid).get();
+    const content = document.getElementById("page-content");
+    content.innerHTML = `
+      <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Companies</h1>
+        <button onclick="showModal('companyModal')" class="px-4 py-2 bg-blue-600 text-white rounded">+ Add Company</button>
+      </div>
+      <div class="card">
+        <table class="min-w-full">
+          <thead>
+            <tr class="border-b">
+              <th class="py-3 px-4 text-left">Name</th>
+              <th class="py-3 px-4 text-left">GSTIN</th>
+              <th class="py-3 px-4 text-left">Address</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${snapshot.docs.map(doc => `
+              <tr class="border-b">
+                <td class="py-3 px-4">${doc.data().name}</td>
+                <td class="py-3 px-4">${doc.data().gstin}</td>
+                <td class="py-3 px-4">${doc.data().address}</td>
+                <td class="py-3 px-4 text-right">
+                  <button class="text-red-500">Delete</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // Load Ledger
+  async function loadLedger() {
+    const snapshot = await db.collection("transactions").where("userId", "==", currentUser.uid).get();
+    const content = document.getElementById("page-content");
+    content.innerHTML = `
+      <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Account Ledger</h1>
+        <button class="px-4 py-2 border rounded">Export</button>
+      </div>
+      <div class="card">
+        <div class="mb-4 flex justify-between items-center">
+          <input type="text" placeholder="Search by reference or company..." class="p-2 border rounded w-3/4" />
+          <select class="p-2 border rounded">
+            <option>All Companies</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-3 gap-4 mb-6">
+          <div class="p-3 border rounded text-center">
+            <div class="text-sm text-gray-500">Total Debit</div>
+            <div class="text-lg font-bold text-red-600">₹3,540.00</div>
+          </div>
+          <div class="p-3 border rounded text-center">
+            <div class="text-sm text-gray-500">Total Credit</div>
+            <div class="text-lg font-bold text-green-600">₹1,000.00</div>
+          </div>
+          <div class="p-3 border rounded text-center">
+            <div class="text-sm text-gray-500">Net Balance</div>
+            <div class="text-lg font-bold text-green-600">₹2,540.00 (DR)</div>
+          </div>
+        </div>
+        <table class="min-w-full">
+          <thead>
+            <tr class="border-b">
+              <th class="py-3 px-4 text-left">Date</th>
+              <th class="py-3 px-4 text-left">Type</th>
+              <th class="py-3 px-4 text-left">Company</th>
+              <th class="py-3 px-4 text-left">Reference</th>
+              <th class="py-3 px-4 text-left">Party</th>
+              <th class="py-3 px-4 text-right">Debit</th>
+              <th class="py-3 px-4 text-right">Credit</th>
+              <th class="py-3 px-4 text-right">Balance</th>
+              <th class="py-3 px-4 text-left">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${snapshot.docs.map(doc => {
+              const d = doc.data();
+              return `
+                <tr class="border-b">
+                  <td class="py-3 px-4">${d.date}</td>
+                  <td class="py-3 px-4">
+                    <span class="px-2 py-1 text-xs rounded ${d.type === 'sale' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}">
+                      ${d.type}
+                    </span>
+                  </td>
+                  <td class="py-3 px-4">${d.company}</td>
+                  <td class="py-3 px-4">${d.reference}</td>
+                  <td class="py-3 px-4">${d.party}</td>
+                  <td class="py-3 px-4 text-right">${d.debit ? '₹' + d.debit : '-'}</td>
+                  <td class="py-3 px-4 text-right">${d.credit ? '₹' + d.credit : '-'}</td>
+                  <td class="py-3 px-4 text-right">₹${d.balance}</td>
+                  <td class="py-3 px-4">
+                    <span class="px-2 py-1 text-xs rounded ${d.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}">
+                      ${d.status}
+                    </span>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // Load GST
+  async function loadGST() {
+    const content = document.getElementById("page-content");
+    content.innerHTML = `
+      <h1 class="text-2xl font-bold mb-6">GST Reports</h1>
+      <div class="card">
+        <h2 class="text-lg font-semibold mb-4">GSTR-1 Summary</h2>
+        <div class="grid grid-cols-2 gap-4 mb-6">
+          <div class="p-4 border rounded">
+            <div class="text-sm text-gray-500">Taxable Value</div>
+            <div class="text-lg font-bold">₹1,200.00</div>
+          </div>
+          <div class="p-4 border rounded">
+            <div class="text-sm text-gray-500">IGST</div>
+            <div class="text-lg font-bold">₹100.00</div>
+          </div>
+          <div class="p-4 border rounded">
+            <div class="text-sm text-gray-500">CGST</div>
+            <div class="text-lg font-bold">₹50.00</div>
+          </div>
+          <div class="p-4 border rounded">
+            <div class="text-sm text-gray-500">SGST</div>
+            <div class="text-lg font-bold">₹50.00</div>
+          </div>
+        </div>
+        <button class="px-4 py-2 bg-blue-600 text-white rounded">Export Report</button>
+      </div>
+    `;
+  }
+
+  // Initialize
+  window.onload = () => {
+    if (!currentUser) {
+      document.getElementById("authScreen").classList.remove("hidden");
     }
-  });
+  };
 </script>
 
 </body>
